@@ -190,17 +190,19 @@ spark.conf.set("spark.sql.shuffle.partitions", "800")
 ``` 
 Page 6 
 DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-# Default is 200 — too low for TB-scale data 
-Why it catches people off guard: 
-The instinct is always "more resources = faster." That is true only if work is distributed evenly. Skew makes scaling © DataArchitectStudio
-useless or counterproductive. This is one of the most common production EMR performance issues. 
-Key Low-Level Details 
-• Spark divides data into partitions — each partition is processed by one task on one executor 
-• Default partition count after shuffle is controlled by spark.sql.shuffle.partitions (default: 200) • A skewed partition means one task does 80% of the work while others do 1-2% each 
+# Default is 200 — too low for TB-scale data
+
+#### Why it catches people off guard:
+The instinct is always "more resources = faster." That is true only if work is distributed evenly. Skew makes scaling useless or counterproductive. This is one of the most common production EMR performance issues.
+
+#### Key Low-Level Details
+• Spark divides data into partitions — each partition is processed by one task on one executor
+• Default partition count after shuffle is controlled by spark.sql.shuffle.partitions (default: 200)
+• A skewed partition means one task does 80% of the work while others do 1-2% each
 • Optimal partition size is typically 128 MB to 256 MB per partition 
 • For 2 TB of data: 2000 GB / 200 MB = ~10,000 partitions is a reasonable target 
 • Shuffle write amplification: with 15 nodes, each shuffle produces 15 × 15 = 225 shuffle files per stage 
-Q4 — Redshift Spectrum vs Redshift Tables — Which One is "Faster"? 
+## **Q4 — Redshift Spectrum vs Redshift Tables — Which One is "Faster"? 
 The Question 
 Your manager asks: "We have 10 TB of historical data in S3 and 500 GB of recent data in Redshift. For a report that joins both, should we move all 10 TB into Redshift or use Redshift Spectrum to query S3 directly? Spectrum is slower than native Redshift tables, right? So we should move everything in?" 
 The trap: "Spectrum is slower" is not always true. And "move everything in" is not always the right answer. 
@@ -248,7 +250,7 @@ Why it catches people off guard:
 People assume "native = always faster." Native tables have sorted blocks, zone maps, and are co-located with 
 Page 8 
 DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-Q5 — Your Spot Instance Was Terminated and Your Glue Job Failed — Whose Fault Is It? 
+## **Q5 — Your Spot Instance Was Terminated and Your Glue Job Failed — Whose Fault Is It? 
 The Question 
 © DataArchitectStudio
 You ran a Glue ETL job using a Spot Instance worker type (G.1X workers with Spot pricing). The job was 70% complete. AWS terminated the Spot Instance. Your job failed, and you lost 3 hours of work. Your colleague says "You should have used On-Demand." Is your colleague right? 
@@ -288,7 +290,7 @@ Cost reality:
 Spot workers cost about 30-70% less than On-Demand Glue workers. For a job that runs 4 hours daily, that saving is significant. But if termination causes a full restart of a 3-hour job, you may end up paying more total than just using On-Demand. 
 Why it catches people off guard: 
 Most people think "Spot = risky, On-Demand = safe." The real lesson is: design for failure. With proper checkpointing and bookmarks, Spot termination becomes a minor inconvenience, not a disaster. 
-Q6 — Reserved Instance vs Savings Plan — You Paid Upfront But Still Got a Huge Bill 
+## **Q6 — Reserved Instance vs Savings Plan — You Paid Upfront But Still Got a Huge Bill 
 The Question 
 Your company bought 3-year Reserved Instances for 10 r5.2xlarge instances, paying the full upfront amount. Six months later, your data team migrated from EC2-based processing to AWS Glue (serverless). The EC2 instances are now sitting idle. Your AWS bill is still the same as before. You already paid — why are you still being charged? 
 You might think: Reserved Instances should cover your costs. They do — just not for what you are using now. 
@@ -348,7 +350,7 @@ Why it catches people off guard:
 Reserved Instances feel like prepaying for a service and then not being charged. In reality, you prepaid for a the upfront cost is simply lost.
 Page 11 
 DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-Q7 — TooManyRequestsException on DynamoDB — You Are © DataArchitectStudio
+## **Q7 — TooManyRequestsException on DynamoDB — You Are © DataArchitectStudio
 Only Doing 100 Reads Per Second 
 The Question 
 Your DynamoDB table is provisioned with 1,000 Read Capacity Units (RCUs). 1 RCU = 1 strongly consistent read per second for items up to 4 KB. So you should be able to do 1,000 reads per second. Your application is only doing 100 reads per second. But you are seeing ProvisionedThroughputExceededException errors. How? 
@@ -397,7 +399,7 @@ def write_item(user_id, data):
 ``` 
 Why it catches people off guard: 
 The math looks perfectly fine at the table level. 100 reads vs 1,000 RCU capacity — should be fine. But DynamoDB is not one big table, it is a collection of partitions. Uneven access patterns create hot spots that violate per-partition limits while the table-level utilization looks healthy. 
-Q8 — Your Glue Job Runs Fine in Dev But Throttles in 
+## **Q8 — Your Glue Job Runs Fine in Dev But Throttles in 
 Production 
 The Question 
 Your Glue job runs perfectly in the dev environment — processes 10 GB in 8 minutes. You deploy it to production with the same code, same Glue version, same number of DPUs. In production, the job takes 45 minutes and CloudWatch shows ThrottlingException errors on the Glue API. You did not change a single line of code. 
@@ -448,7 +450,7 @@ DataArchitectStudio Tricky Concepts in Data Modeling · 2026
 Why it catches people off guard: 
 Same code, same DPUs, different environment — "it must be a data problem." But the issue has nothing to do with the data. It is a concurrency problem invisible in dev (one job at a time) and very visible in production (many jobs at © DataArchitectStudio
 a time). 
-Q9 — A Redshift Node Went Down — Your Queries Are Still Running. How? 
+## **Q9 — A Redshift Node Went Down — Your Queries Are Still Running. How? 
 The Question 
 Your Redshift cluster has 8 ra3.4xlarge compute nodes. AWS notified you that one node experienced a hardware failure. You expected queries to fail or the cluster to go offline. But users are still running queries successfully. Is this a glitch in the notification? Or are your queries actually running on a broken node? 
 You might think: Either the notification was wrong, or queries should be failing. Both assumptions are wrong. 
@@ -487,7 +489,7 @@ ORDER BY starttime DESC;
 ``` 
 Why it catches people off guard: 
 Most databases (especially single-node ones) go down when the server has a hardware failure. Redshift's distributed, mirrored architecture is designed to treat node failure as a routine event — not an emergency. The cluster is designed to survive it silently. 
-Q10 — On-Demand vs Spot vs Reserved — Which One Should You Use Right Now? 
+## **Q10 — On-Demand vs Spot vs Reserved — Which One Should You Use Right Now? 
 The Question 
 You are starting a new data pipeline project. Your manager asks you to choose the cheapest instance pricing model for EMR. You say "Spot — it's 70% cheaper!" Your manager says "But what if it gets terminated?" You say "Reserved then — we'll commit for 3 years." Your manager says "But we don't know if this pipeline will still exist in 3 years." 
 The trap: You are both partially right. The correct answer depends on a framework, not a single rule.
@@ -552,7 +554,7 @@ Never use Spot for master — losing it kills the job
 
 
 © DataArchitectStudio
-Q11 — You Increased Glue DPUs From 5 to 50 But the Job Did Not Get 10x Faster 
+## **Q11 — You Increased Glue DPUs From 5 to 50 But the Job Did Not Get 10x Faster 
 The Question 
 Your Glue job uses 5 DPUs (Data Processing Units) and takes 60 minutes to process 500 GB. You increase DPUs to 50. You expect it to run in 6 minutes (10x more resources = 10x faster). It finishes in 40 minutes. You get about 1.5x improvement for a 10x increase in resources — and a 10x higher bill. 
 Where did the 8.5x speed improvement go? 
@@ -567,7 +569,7 @@ If your 500 GB is stored as 10,000 small files (50 MB each), each file becomes o
 Page 18 
 DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
 If your job has a groupBy or join, all data must be reshuffled across nodes. This network transfer is bounded by network bandwidth, not DPU count. 
-Fix:
+### Fix:
 ```python
 # 1. Combine small files before processing (S3 groupFiles option)
 datasource = glueContext.create_dynamic_frame.from_options(
@@ -615,7 +617,7 @@ Glue has max DPU limits
 
 
 ©
-Q12 — Redshift COPY Command Is Taking 3 Hours for 500 GB — What Is Wrong? 
+## **Q12 — Redshift COPY Command Is Taking 3 Hours for 500 GB — What Is Wrong? 
 Page 19 
 DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
 The Question 
@@ -667,7 +669,7 @@ ORDER BY transfer_microsecs DESC;
 ``` 
 Why it catches people off guard: 
 COPY is described as "the fastest way to load data into Redshift" — which is true. But fast is relative. A single-file COPY with no parallelism is slower than a naive INSERT loop with parallelism. The speed of COPY comes entirely from how well you exploit parallelism through file count matching slice count. 
-Q13 — Your EMR Cluster Auto-Scaled But Costs Tripled — You Did Nothing Wrong 
+## **Q13 — Your EMR Cluster Auto-Scaled But Costs Tripled — You Did Nothing Wrong 
 The Question 
 You set up EMR with Auto Scaling — a great cost-saving feature, right? The cluster scales up when CPU is high and scales down when CPU is low. You go on vacation for a week. You come back to an AWS bill 3x higher than expected. CloudWatch shows the cluster scaled up to 50 nodes multiple times throughout the week. Your Spark jobs themselves are normal — same jobs, same data. What happened? 
 Auto Scaling is supposed to save money. How did it triple your costs? 
@@ -696,7 +698,7 @@ This caps your worst-case bill even if something goes wrong
 4. Enable EMR Managed Scaling (newer, smarter than Auto Scaling policies) 
 AWS manages scale decisions using internal metrics 
 More accurate than CloudWatch-based rules 
-Q14 — Kinesis Is Dropping Records Even Though You Have Enough Shards 
+## **Q14 — Kinesis Is Dropping Records Even Though You Have Enough Shards 
 Page 22 
 DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
 The Question 
@@ -748,7 +750,7 @@ kinesis.put_records(StreamName='your-stream', Records=records)
 ``` 
 Additional check — Enhanced Fan-Out vs Standard consumers: 
 Standard Kinesis consumers share the 2 MB/second READ limit per shard across all consumers. If you have 5 consumers reading the same shard, each gets only 400 KB/second. Use Enhanced Fan-Out to give each consumer its own dedicated 2 MB/second per shard. 
-Q15 — You Enabled Redshift Auto Vacuum But Table Scans Are Still Slow 
+## **Q15 — You Enabled Redshift Auto Vacuum But Table Scans Are Still Slow 
 The Question 
 You read about Redshift's automatic VACUUM feature — it runs in the background and automatically reclaims space from deleted rows and re-sorts data. You enabled it. You waited a week. But your table scans are still slow and svv_table_info shows unsorted is still at 40%. You expected Auto Vacuum to fix this. Why hasn't it? 
 Auto Vacuum is running. The table is still unsorted. Contradiction? 
