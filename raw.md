@@ -1,70 +1,58 @@
-DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-Scenario-Based Tricky Questions — AWS Data Engineering Services 
-Studio
-These questions are intentionally written to create confusion at first read. Read the question carefully, think about it, then read the answer. That gap between confusion and clarity is where real learning happens. 
-Table of Contents 
-# 
-Topic
-Q1 
-ect
-Redshift cluster is running but queries are getting slower every day 
-Q2 
-t
-Glue job succeeds but the data in S3 is wrong — or is it? 
-Q3 
-i
-You added more nodes to EMR but the job got slower 
-Q4 
-Redshift Spectrum vs Redshift — which one is "faster"?
-Q5 ch
-Your Spot Instance was terminated and your Glue job failed — whose fault is it?
-Q6 r
-Reserved Instance vs Savings Plan — you paid upfront but still got a huge bill
-Q7 A
-TooManyRequestsException on DynamoDB — you are only doing 100 reads per second
-Q8 
-Your Glue job runs fine in dev but throttles in production
-Q9 ta
-Redshift node went down — your queries are still running. How?
-Q10 a
-On-Demand vs Spot vs Reserved — which one should you use right now?
-Q11  D
-You increased Glue DPUs from 5 to 50 but the job did not get 10x faster
-Q12 
-Redshift COPY command is taking 3 hours for 500 GB — what is wrong?
-Q13 
-Your EMR cluster auto-scaled but costs tripled — you did nothing wrong
-Q14 
-Kinesis is dropping records even though you have enough shards
-Q15 
-You enabled Redshift Auto Vacuum but table scans are still slow
+# DataArchitectStudio Tricky Concepts in Data Modeling · 2026
+
+## Scenario-Based Tricky Questions — AWS Data Engineering Services
+
+These questions are intentionally written to create confusion at first read. Read the question carefully, think about it, then read the answer. That gap between confusion and clarity is where real learning happens.
+
+### Table of Contents
+
+| # | Topic |
+|---|-------|
+| Q1 | Redshift cluster is running but queries are getting slower every day |
+| Q2 | Glue job succeeds but the data in S3 is wrong — or is it? |
+| Q3 | You added more nodes to EMR but the job got slower |
+| Q4 | Redshift Spectrum vs Redshift — which one is "faster"? |
+| Q5 | Your Spot Instance was terminated and your Glue job failed — whose fault is it? |
+| Q6 | Reserved Instance vs Savings Plan — you paid upfront but still got a huge bill |
+| Q7 | TooManyRequestsException on DynamoDB — you are only doing 100 reads per second |
+| Q8 | Your Glue job runs fine in dev but throttles in production |
+| Q9 | Redshift node went down — your queries are still running. How? |
+| Q10 | On-Demand vs Spot vs Reserved — which one should you use right now? |
+| Q11 | You increased Glue DPUs from 5 to 50 but the job did not get 10x faster |
+| Q12 | Redshift COPY command is taking 3 hours for 500 GB — what is wrong? |
+| Q13 | Your EMR cluster auto-scaled but costs tripled — you did nothing wrong |
+| Q14 | Kinesis is dropping records even though you have enough shards |
+| Q15 | You enabled Redshift Auto Vacuum but table scans are still slow |
 
 
 
 ©
-Page 1 
-DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-© DataArchitectStudio
-Q1 — Redshift Cluster is Running But Queries Are Getting Slower Every Day 
-The Question 
-Your Redshift cluster has 4 ra3.4xlarge nodes. No new data is being loaded. No new queries were added. Your team did not change anything. But every day for the past 2 weeks, query performance has been degrading — what you used to run in 30 seconds now takes 4 minutes. 
-You might think: Hardware is degrading? Network issue? Someone running heavy queries? All wrong. 
-The Answer 
-The real culprit is table bloat and unsorted/unskewed data caused by missing VACUUM and ANALYZE operations. 
-Here is what happens under the hood: 
-1. DELETE and UPDATE operations do not physically remove rows in Redshift. 
-When you delete or update rows, Redshift marks those rows as "tombstoned" (soft delete) but the disk space is not freed. These dead rows still get scanned during every query. Over time, as more updates and deletes accumulate, every scan reads more dead rows than live ones. 
-2. SORT KEY order degrades over time. 
-Redshift stores data in sorted blocks on disk. When new rows arrive, they may not be inserted in sort key order. Over time, the "percent of unsorted rows" climbs. When it is high, Redshift cannot use zone maps (block-level min/max statistics) to skip blocks, so it scans everything. 
-3. Statistics go stale. 
-Redshift's query planner uses table statistics to choose the best execution plan. If statistics are not refreshed (via ANALYZE), the planner makes wrong decisions — like choosing a full table scan instead of a more targeted approach. 
-Root Cause Summary: 
-• Dead rows from DELETE/UPDATE piling up → more data scanned 
-• Unsorted rows → zone maps become useless → no block skipping 
+## **Q1 — Redshift Cluster is Running But Queries Are Getting Slower Every Day**
+
+### The Question
+Your Redshift cluster has 4 ra3.4xlarge nodes. No new data is being loaded. No new queries were added. Your team did not change anything. But every day for the past 2 weeks, query performance has been degrading — what you used to run in 30 seconds now takes 4 minutes.
+
+You might think: Hardware is degrading? Network issue? Someone running heavy queries? All wrong.
+
+### The Answer
+The real culprit is table bloat and unsorted/unskewed data caused by missing VACUUM and ANALYZE operations.
+
+Here is what happens under the hood:
+
+1. DELETE and UPDATE operations do not physically remove rows in Redshift.
+When you delete or update rows, Redshift marks those rows as "tombstoned" (soft delete) but the disk space is not freed. These dead rows still get scanned during every query. Over time, as more updates and deletes accumulate, every scan reads more dead rows than live ones.
+
+2. SORT KEY order degrades over time.
+Redshift stores data in sorted blocks on disk. When new rows arrive, they may not be inserted in sort key order. Over time, the "percent of unsorted rows" climbs. When it is high, Redshift cannot use zone maps (block-level min/max statistics) to skip blocks, so it scans everything.
+
+3. Statistics go stale.
+Redshift's query planner uses table statistics to choose the best execution plan. If statistics are not refreshed (via ANALYZE), the planner makes wrong decisions — like choosing a full table scan instead of a more targeted approach.
+
+#### Root Cause Summary:
+• Dead rows from DELETE/UPDATE piling up → more data scanned
+• Unsorted rows → zone maps become useless → no block skipping
 • Stale statistics → bad query plans 
-Page 2 
-DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-Fix:
+### Fix:
 ```sql
 -- Step 1: Reclaim space from dead rows and re-sort data
 VACUUM FULL your_schema.your_table;
@@ -82,35 +70,42 @@ SELECT
 FROM svv_table_info
 WHERE unsorted > 10 OR stats_off > 10
 ORDER BY unsorted DESC;
-``` 
-Production Tip: 
-At production scale (hundreds of millions of rows), running VACUUM FULL on a busy table blocks writes. Use VACUUM SORT ONLY first (faster, no locking), then VACUUM DELETE ONLY during a maintenance window. 
-Why it caught people off guard: 
-Nobody changed anything. The degradation was gradual. The cluster looked healthy in CloudWatch — CPU normal, connections normal. The problem was entirely inside the data blocks, invisible without querying svv_table_info. 
-Key Low-Level Details 
-• Redshift uses columnar storage — each column is stored as a series of 1 MB blocks 
-• Each block has a zone map — min and max value stored in metadata 
-• If sort order is intact, Redshift reads zone maps and skips entire blocks that do not match your WHERE clause 
-• If sort order is broken, zone maps are useless — Redshift scans every block 
-• A table with 10% unsorted rows can still have terrible performance if those unsorted rows are spread across every block 
-Q2 — Glue Job Succeeds But the Data in S3 is Wrong — Or Is It? 
-Page 3 
-DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-The Question 
-Your AWS Glue ETL job runs successfully. Green checkmark. No errors in CloudWatch. But when your analyst 
-queries the Athena table on top of the S3 output, they see duplicate rows — sometimes 2x, sometimes 3x the © DataArchitectStudio
-expected count. 
-You might think: Bug in the transformation logic? Glue wrote duplicates? Wrong. The job is actually correct. 
-The Answer 
-The problem is almost certainly Glue job bookmarks not being configured correctly combined with S3 output not being cleared before rerun — causing multiple job runs to write overlapping data to the same S3 prefix. 
-Here is what actually happens: 
-Scenario A — No Job Bookmark, Manual Rerun: 
-Glue reads from the source (say, an RDS table or S3 input folder). On the first run, it writes 10 million rows to s3://bucket/output/. Someone manually reruns the job (maybe they thought it failed, or they changed a config). The job reads the same source again and writes another 10 million rows to the same output path — but S3 does not delete old files automatically. Now the Athena table sees 20 million rows. 
-Scenario B — Job Bookmark Misconfigured: 
-Glue Job Bookmarks track which S3 files or JDBC offsets have already been processed. If bookmarks are enabled but the output is an overwrite target (not an append target), you get a mismatch — Glue skips the source data correctly, but the previous output files still exist, leading Athena to read stale data alongside new data. 
-Scenario C — Glue Dynamic Frames and Partial Writes: 
-If a Glue job crashes mid-write and is retried, partial Parquet files may already exist in S3. On retry, new files are written alongside the partial ones. Athena reads all files in the prefix — including the incomplete ones. 
-Fix:
+```
+
+#### Production Tip:
+At production scale (hundreds of millions of rows), running VACUUM FULL on a busy table blocks writes. Use VACUUM SORT ONLY first (faster, no locking), then VACUUM DELETE ONLY during a maintenance window.
+
+#### Why it caught people off guard:
+Nobody changed anything. The degradation was gradual. The cluster looked healthy in CloudWatch — CPU normal, connections normal. The problem was entirely inside the data blocks, invisible without querying svv_table_info.
+
+#### Key Low-Level Details
+• Each block has a zone map — min and max value stored in metadata
+• If sort order is intact, Redshift reads zone maps and skips entire blocks that do not match your WHERE clause
+• If sort order is broken, zone maps are useless — Redshift scans every block
+• A table with 10% unsorted rows can still have terrible performance if those unsorted rows are spread across every block
+
+## **Q2 — Glue Job Succeeds But the Data in S3 is Wrong — Or Is It?**
+
+### The Question
+Your AWS Glue ETL job runs successfully. Green checkmark. No errors in CloudWatch. But when your analyst queries the Athena table on top of the S3 output, they see duplicate rows — sometimes 2x, sometimes 3x the expected count.
+
+You might think: Bug in the transformation logic? Glue wrote duplicates? Wrong. The job is actually correct.
+
+### The Answer
+The problem is almost certainly Glue job bookmarks not being configured correctly combined with S3 output not being cleared before rerun — causing multiple job runs to write overlapping data to the same S3 prefix.
+
+Here is what actually happens:
+
+#### Scenario A — No Job Bookmark, Manual Rerun:
+Glue reads from the source (say, an RDS table or S3 input folder). On the first run, it writes 10 million rows to s3://bucket/output/. Someone manually reruns the job (maybe they thought it failed, or they changed a config). The job reads the same source again and writes another 10 million rows to the same output path — but S3 does not delete old files automatically. Now the Athena table sees 20 million rows.
+
+#### Scenario B — Job Bookmark Misconfigured:
+Glue Job Bookmarks track which S3 files or JDBC offsets have already been processed. If bookmarks are enabled but the output is an overwrite target (not an append target), you get a mismatch — Glue skips the source data correctly, but the previous output files still exist, leading Athena to read stale data alongside new data.
+
+#### Scenario C — Glue Dynamic Frames and Partial Writes:
+If a Glue job crashes mid-write and is retried, partial Parquet files may already exist in S3. On retry, new files are written alongside the partial ones. Athena reads all files in the prefix — including the incomplete ones.
+
+### Fix:
 ```python
 # Option 1: Always clear the output prefix before writing
 import boto3
@@ -134,25 +129,28 @@ datasink = glueContext.write_dynamic_frame.from_options(
 # Option 3: Enable Job Bookmarks correctly
 # In AWS Console → Glue Job → Edit → Job Bookmark = Enable
 # This ensures the job only processes NEW files since last successful run
-``` 
-Why it catches people off guard: 
-The Glue job shows SUCCESS. No error. The problem is entirely in what was already in S3 from a previous run. Analysts see wrong counts and immediately blame the transformation logic — which is actually fine. 
-Key Low-Level Details 
-• S3 is a key-value store — it does not have a concept of "overwrite a folder." Writing to the same prefix adds new objects alongside old ones 
-• Athena reads ALL objects under a prefix when you query a table — it has no way to know which files are "current" 
-• Glue Job Bookmarks work by storing a checkpoint of the last successfully processed partition or file in AWS metadata — they work well for append scenarios but not for full-refresh scenarios 
-• For full-refresh pipelines, the safest pattern is: delete output prefix → run Glue job → verify row count 
-Q3 — You Added More Nodes to EMR But the Job Got Slower 
-The Question 
-You have an EMR Spark cluster with 5 core nodes (r5.2xlarge). Your job processes 2 TB of data and takes 45 minutes. You scale up to 15 core nodes expecting it to run 3x faster. Instead, it now takes 55 minutes. You literally made it slower by adding more machines. 
-You might think: AWS bug? Wrong instance type? No. This is a fundamental Spark behavior that surprises almost everyone. 
-The Answer 
-Page 5 
-DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
-The problem is data skew — one or more partitions of your data are dramatically larger than others. Adding more nodes gave Spark more workers, but the skewed partition still ends up on one worker. That one worker takes 50 minutes. All other 14 workers finish in 5 minutes and sit idle waiting. The job cannot complete until the last task finishes. 
-© DataArchitectStudio
-Additionally, adding more nodes increases shuffle overhead. Shuffle is when Spark redistributes data across nodes (during joins, groupBy, etc.). With 15 nodes, there are more network transfers required to move data between nodes during shuffle — and if your job is shuffle-heavy, this extra coordination cost outweighs the parallelism gain. 
-How to detect skew: 
+#### Why it catches people off guard:
+The Glue job shows SUCCESS. No error. The problem is entirely in what was already in S3 from a previous run. Analysts see wrong counts and immediately blame the transformation logic — which is actually fine.
+
+#### Key Low-Level Details
+• S3 is a key-value store — it does not have a concept of "overwrite a folder." Writing to the same prefix adds new objects alongside old ones
+• Athena reads ALL objects under a prefix when you query a table — it has no way to know which files are "current"
+• Glue Job Bookmarks work by storing a checkpoint of the last successfully processed partition or file in AWS metadata — they work well for append scenarios but not for full-refresh scenarios
+• For full-refresh pipelines, the safest pattern is: delete output prefix → run Glue job → verify row count
+
+## **Q3 — You Added More Nodes to EMR But the Job Got Slower**
+
+### The Question
+You have an EMR Spark cluster with 5 core nodes (r5.2xlarge). Your job processes 2 TB of data and takes 45 minutes. You scale up to 15 core nodes expecting it to run 3x faster. Instead, it now takes 55 minutes. You literally made it slower by adding more machines.
+
+You might think: AWS bug? Wrong instance type? No. This is a fundamental Spark behavior that surprises almost everyone.
+
+### The Answer
+The problem is data skew — one or more partitions of your data are dramatically larger than others. Adding more nodes gave Spark more workers, but the skewed partition still ends up on one worker. That one worker takes 50 minutes. All other 14 workers finish in 5 minutes and sit idle waiting. The job cannot complete until the last task finishes.
+
+Additionally, adding more nodes increases shuffle overhead. Shuffle is when Spark redistributes data across nodes (during joins, groupBy, etc.). With 15 nodes, there are more network transfers required to move data between nodes during shuffle — and if your job is shuffle-heavy, this extra coordination cost outweighs the parallelism gain.
+
+#### How to detect skew: 
 In Spark UI, look at the Stages tab. If most tasks in a stage finish quickly but 1-2 tasks take significantly longer, that is skew. The "Max" task duration will be far above the "Median." 
 ```pyspark
 # Check partition sizes to detect skew
@@ -768,36 +766,39 @@ DataArchitectStudio Tricky Concepts in Data Modeling · 2026
 The threshold behavior: 
 Auto Vacuum only prioritizes a table for sorting when unsorted_rows / total_rows > 5%. But even when triggered, it processes the unsorted portion incrementally — it may sort 10% of the unsorted rows before being paused, then pause for hours, then sort another 10%, etc. Meanwhile, new INSERT operations keep adding unsorted rows faster than vacuum can sort them. 
 What actually works: 
--- Option 1: Run VACUUM manually during a low-traffic window 
--- Schedule for Sunday 2 AM when query load is minimal 
-VACUUM SORT ONLY your_schema.your_table 
-TO 95 PERCENT; -- Sort until 95% of rows are in sorted order 
--- (does not need to be 100% to be effective) 
--- Option 2: Check vacuum progress 
-SELECT * FROM svv_vacuum_progress; 
--- Option 3: For very large tables — vacuum by partition incrementally 
--- Use WHERE clause to vacuum one time partition at a time 
-VACUUM your_schema.your_table 
-TO 95 PERCENT BOOST; -- BOOST uses more resources, runs faster 
--- Use only during maintenance windows 
--- Option 4: Redesign the ingestion pattern 
--- Instead of inserting rows directly (which always land unsorted), 
--- use a staging table + INSERT INTO SELECT + DROP staging 
-CREATE TABLE your_schema.your_table_staging (LIKE your_schema.your_table); 
--- Load new data into staging (it is small, sorting is fast) 
-COPY your_schema.your_table_staging FROM 's3://...' IAM_ROLE '...'; 
--- Merge: delete old versions of updated rows, insert new ones 
-BEGIN; 
-DELETE FROM your_schema.your_table 
-USING your_schema.your_table_staging 
-WHERE your_table.id = your_table_staging.id; 
-INSERT INTO your_schema.your_table 
-SELECT * FROM your_schema.your_table_staging; 
-Page 25 
-DataArchitectStudio Tricky Concepts in Data Modeling · 2026 
+-- Option 1: Run VACUUM manually during a low-traffic window
+-- Schedule for Sunday 2 AM when query load is minimal
+VACUUM SORT ONLY your_schema.your_table
+TO 95 PERCENT;  -- Sort until 95% of rows are in sorted order
+-- (does not need to be 100% to be effective)
 
-COMMIT; 
-DROP TABLE your_schema.your_table_staging; -- Now run ANALYZE 
+-- Option 2: Check vacuum progress
+SELECT * FROM svv_vacuum_progress;
+
+-- Option 3: For very large tables — vacuum by partition incrementally
+-- Use WHERE clause to vacuum one time partition at a time
+VACUUM your_schema.your_table
+TO 95 PERCENT BOOST;  -- BOOST uses more resources, runs faster
+-- Use only during maintenance windows
+
+-- Option 4: Redesign the ingestion pattern
+-- Instead of inserting rows directly (which always land unsorted),
+-- use a staging table + INSERT INTO SELECT + DROP staging
+CREATE TABLE your_schema.your_table_staging (LIKE your_schema.your_table);
+
+-- Load new data into staging (it is small, sorting is fast)
+COPY your_schema.your_table_staging FROM 's3://...' IAM_ROLE '...';
+
+-- Merge: delete old versions of updated rows, insert new ones
+BEGIN;
+DELETE FROM your_schema.your_table
+USING your_schema.your_table_staging
+WHERE your_table.id = your_table_staging.id;
+INSERT INTO your_schema.your_table
+SELECT * FROM your_schema.your_table_staging;
+
+COMMIT;
+DROP TABLE your_schema.your_table_staging;  -- Now run ANALYZE
 ANALYZE your_schema.your_table; 
 Why it catches people off guard: 
 ctStudio
