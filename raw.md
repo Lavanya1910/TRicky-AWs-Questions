@@ -158,7 +158,9 @@ In Spark UI, look at the Stages tab. If most tasks in a stage finish quickly but
 # Check partition sizes to detect skew
 from pyspark.sql.functions import spark_partition_id, count
 
-df.groupBy(spark_partition_id()).agg(count("*").alias("row_count"))     .orderBy("row_count", ascending=False)     .show(20)
+df.groupBy(spark_partition_id()).agg(count("*").alias("row_count")) \
+    .orderBy("row_count", ascending=False) \
+    .show(20)
 
 # Fix Option 1: Repartition evenly
 df_balanced = df.repartition(200)
@@ -691,9 +693,11 @@ EMR Auto Scaling has a default scale-down cooldown period and a termination dela
 Scaling on YARNMemoryAvailablePercentage (memory) is more appropriate for Spark than scaling on CPU. CPU can spike for reasons unrelated to needing more compute capacity.
 
 ### Fix:
-1. Fix the root cause — increase executor memory
-spark.executor.memory = 8g (instead of 4g)
-spark.executor.memoryOverhead = 2g (for off-heap, native operations)
+```python
+# 1. Fix the root cause — increase executor memory
+spark.executor.memory = "8g"  # instead of 4g
+spark.executor.memoryOverhead = "2g"  # for off-heap, native operations
+```
 
 2. Use better Auto Scaling metrics
 Scale UP trigger: YARNMemoryAvailablePercentage < 15%
